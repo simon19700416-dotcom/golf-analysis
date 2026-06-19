@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>球杆离散分析系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+    <style>
+        :root {
+            --tm-bg: #11141a;
+            --tm-panel: #1a1f2c;
+            --tm-text: #ffffff;
+            --tm-accent: #ff5a00; /* TrackMan 经典橙 */
+            --tm-border: #2d3548;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--tm-bg);
+            color: var(--tm-text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            padding: 15px;
+            min-height: 100vh;
+        }
+
+        /* 顶部控制头部区域 */
+        .top-header {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        @media (min-width: 768px) {
+            .top-header {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+        }
+
+        .top-header h1 {
+            color: var(--tm-accent);
+            font-weight: 700;
+            font-size: 22px;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            text-align: center;
+        }
+
+        /* 右侧球员和日期容器 */
+        .meta-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            background: var(--tm-panel);
+            border: 1px solid var(--tm-border);
+            padding: 8px 12px;
+            border-radius: 8px;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #8a94a6;
+        }
+
+        .meta-item input, .meta-item select {
+            background: var(--tm-bg);
+            border: 1px solid var(--tm-border);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            box-sizing: border-box;
+            height: 34px;
+        }
+
+        .meta-item input:focus, .meta-item select:focus { border-color: var(--tm-accent); }
+        .meta-item input[type="date"] { color-scheme: dark; }
+
+        /* 主容器：移动端/iPad垂直排列，大宽屏水平并排 */
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            flex: 1;
+        }
+
+        @media (min-width: 1024px) {
+            .container {
+                display: grid;
+                grid-template-columns: 360px 1fr;
+                height: calc(100vh - 90px);
+            }
+        }
+
+        .panel {
+            background: var(--tm-panel);
+            border: 1px solid var(--tm-border);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 拖拽上传区样式 */
+        .upload-zone {
+            background: rgba(255, 90, 0, 0.02);
+            border: 2px dashed var(--tm-border);
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+            font-size: 13px;
+            color: #8a94a6;
+            cursor: pointer;
+            margin-bottom: 12px;
+        }
+
+        /* 左侧输入面板内部排版 */
+        .input-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--tm-border);
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+
+        .input-header h3 { 
+            margin: 0; 
+            color: var(--tm-accent); 
+            font-size: 15px;
+        }
+
+        .club-select {
+            background: var(--tm-bg);
+            color: #fff;
+            border: 1px solid var(--tm-accent);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 13px;
+            font-weight: bold;
+            outline: none;
+            height: 32px;
+        }
+
+        .table-wrapper {
+            max-height: 280px;
+            overflow-y: auto; 
+            margin-bottom: 10px;
+            border: 1px solid rgba(45, 53, 72, 0.3);
+            border-radius: 6px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (min-width: 1024px) {
+            .table-wrapper {
+                flex: 1;
+                max-height: none;
+            }
+        }
+
+        .input-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .input-table th {
+            text-align: center;
+            padding: 6px;
+            font-size: 12px;
+            color: #8a94a6;
+            background: rgba(17, 20, 26, 0.4);
+            position: sticky; top: 0; z-index: 1;
+        }
+        .input-table td {
+            padding: 5px;
+            border-bottom: 1px solid rgba(45, 53, 72, 0.4);
+        }
+        .input-table input {
+            width: 100%;
+            background: rgba(17, 20, 26, 0.6);
+            border: 1px solid rgba(45, 53, 72, 0.6);
+            color: #ffffff;
+            padding: 6px;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 13px;
+            text-align: center;
+            height: 34px;
+        }
+        .input-table input:focus {
+            border-color: var(--tm-accent);
+            background: rgba(26, 31, 44, 0.8);
+            outline: none;
+        }
+
+        .stats-header {
+            margin: 10px 0 8px 0;
+            color: var(--tm-accent);
+            font-size: 15px;
+            border-bottom: 1px solid var(--tm-border);
+            padding-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .stat-box {
+            background: var(--tm-bg);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--tm-border);
+            text-align: center;
+        }
+        .stat-box span { display: block; font-size: 11px; color: #888; margin-bottom: 2px;}
+        .stat-box strong { font-size: 14px; color: #fff; }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            min-height: 420px;
+        }
+        
+        @media (min-width: 1024px) {
+            .chart-container {
+                height: 100%;
+                min-height: auto;
+            }
+        }
+        
+        #dispersionChart {
+            width: 100% !important;
+            height: 100% !important;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-header">
+        <h1>离 散 分 析 系 统</h1>
+        
+        <div class="meta-container">
+            <div class="meta-item">
+                <label>球员:</label>
+                <input type="text" id="playerName" value="Adonis Lee" style="width: 90px;">
+            </div>
+            <div class="meta-item">
+                <label>日期:</label>
+                <input type="date" id="testDate" value="2026-06-01">
+            </div>
+            <div class="meta-item">
+                <label>置信度:</label>
+                <select id="confidenceLevel" onchange="updateChartFromInputs()">
+                    <option value="0.60">60%</option>
+                    <option value="0.95" selected>95%</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="panel input-section">
+            <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <span style="color: var(--tm-accent); font-weight: bold;">导入新数据(CSV)</span>
+                <input type="file" id="fileInput" accept=".csv" style="display: none;" onchange="handleFileSelect(this)">
+            </div>
+
+            <div class="input-header">
+                <h3>数据输入</h3>
+                <select id="clubSelect" class="club-select" onchange="loadClubDataAndStyle()">
+                </select>
+            </div>
+            
+            <div class="table-wrapper">
+                <table class="input-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 20%;">球号</th>
+                            <th style="width: 40%;">Carry (YDS)</th>
+                            <th style="width: 40%;">Offline (YDS)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="shotInputsTableBody">
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="statsTitle" class="stats-header">数据统计</div>
+            <div class="stats-grid">
+                <div class="stat-box"><span>平均 Carry</span><strong id="avgCarry">-</strong></div>
+                <div class="stat-box"><span>平均 Offline</span><strong id="avgOffline">-</strong></div>
+                <div class="stat-box"><span id="lblSdCarry">距离误差 (95%)</span><strong id="sdCarry">-</strong></div>
+                <div class="stat-box"><span id="lblSdOffline">方向误差 (95%)</span><strong id="sdOffline">-</strong></div>
+            </div>
+        </div>
+
+        <div class="panel chart-container">
+            <canvas id="dispersionChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let database = {
+            "DRIVER1": [{"x": -38.1, "y": 283.4}, {"x": -2.4, "y": 284.6}, {"x": 15.5, "y": 275.9}, {"x": 7.9, "y": 289.8}, {"x": -39.0, "y": 280.2}, {"x": 3.4, "y": 295.3}, {"x": 22.0, "y": 282.2}, {"x": -3.4, "y": 281.0}, {"x": 20.7, "y": 285.9}, {"x": 4.3, "y": 273.0}],
+            "F.WOOD3": [{"x": -26.3, "y": 235.8}, {"x": -2.3, "y": 242.0}, {"x": -4.8, "y": 247.9}, {"x": 1.2, "y": 235.4}, {"x": -3.2, "y": 238.4}, {"x": 4.3, "y": 238.6}, {"x": -11.9, "y": 240.2}, {"x": 11.2, "y": 225.5}, {"x": -20.9, "y": 240.7}, {"x": -21.4, "y": 239.5}],
+            "F.WOOD5": [{"x": -7.3, "y": 226.5}, {"x": -1.2, "y": 218.4}, {"x": 10.9, "y": 214.6}, {"x": 17.5, "y": 225.5}, {"x": 0.4, "y": 225.5}, {"x": -3.1, "y": 221.7}, {"x": -9.3, "y": 213.9}, {"x": 0.8, "y": 215.1}, {"x": -5.9, "y": 217.4}, {"x": -1.6, "y": 214.9}],
+            "IRON4": [{"x": -5.0, "y": 196.2}, {"x": 5.2, "y": 198.8}, {"x": -0.6, "y": 195.1}, {"x": -12.4, "y": 200.7}, {"x": -1.9, "y": 191.0}, {"x": -4.5, "y": 198.9}, {"x": -3.3, "y": 197.8}, {"x": -14.4, "y": 196.1}, {"x": -16.4, "y": 205.8}, {"x": -6.6, "y": 201.2}],
+            "IRON5": [{"x": 1.4, "y": 192.1}, {"x": -6.3, "y": 182.7}, {"x": -1.3, "y": 184.8}, {"x": -6.4, "y": 189.6}, {"x": -5.1, "y": 184.8}, {"x": -6.8, "y": 186.2}, {"x": -3.5, "y": 192.1}, {"x": 3.7, "y": 183.1}, {"x": -12.3, "y": 188.7}, {"x": -1.3, "y": 189.3}],
+            "IRON6": [{"x": -1.2, "y": 172.9}, {"x": -5.5, "y": 171.1}, {"x": -4.8, "y": 175.7}, {"x": -7.1, "y": 173.0}, {"x": -2.7, "y": 172.2}, {"x": -7.2, "y": 176.6}, {"x": 2.2, "y": 174.9}, {"x": -6.8, "y": 173.4}, {"x": 1.5, "y": 175.0}, {"x": -2.3, "y": 174.4}],
+            "IRON7": [{"x": -2.9, "y": 164.8}, {"x": -3.2, "y": 165.4}, {"x": -4.6, "y": 166.3}, {"x": -4.0, "y": 163.7}, {"x": -2.1, "y": 159.9}, {"x": -4.5, "y": 161.9}, {"x": 0.4, "y": 163.8}, {"x": -0.6, "y": 159.6}, {"x": -5.3, "y": 161.7}, {"x": -6.1, "y": 165.8}],
+            "IRON8": [{"x": -2.7, "y": 150.9}, {"x": -0.1, "y": 152.4}, {"x": -2.5, "y": 154.6}, {"x": -1.4, "y": 151.7}, {"x": -2.3, "y": 150.1}, {"x": 0.3, "y": 149.2}, {"x": -1.7, "y": 153.9}, {"x": -0.6, "y": 147.2}, {"x": -2.2, "xl": 148.6}, {"x": -3.9, "y": 150.1}],
+            "IRON9": [{"x": -2.6, "y": 141.5}, {"x": -1.1, "y": 135.5}, {"x": 0.4, "y": 142.1}, {"x": 0.7, "y": 135.6}, {"x": -2.4, "y": 137.9}, {"x": 1.3, "y": 139.1}, {"x": -2.8, "y": 137.2}, {"x": -2.8, "y": 136.2}, {"x": -1.1, "y": 137.9}, {"x": -1.2, "y": 139.6}],
+            "IRONP": [{"x": -1.3, "y": 128.8}, {"x": -4.5, "y": 128.4}, {"x": -1.1, "y": 125.7}, {"x": -2.0, "y": 123.6}, {"x": -2.7, "y": 128.2}, {"x": -2.5, "y": 122.9}, {"x": -1.8, "y": 125.0}, {"x": -1.7, "y": 127.3}, {"x": -3.0, "y": 125.1}, {"x": -1.8, "y": 126.9}],
+            "WEDGE50": [{"x": 0.4, "y": 113.8}, {"x": -0.6, "y": 112.5}, {"x": -1.7, "y": 112.3}, {"x": -3.0, "y": 115.1}, {"x": -0.6, "y": 112.4}, {"x": -2.1, "y": 110.1}, {"x": -1.0, "y": 112.0}, {"x": -1.7, "y": 115.0}, {"x": -2.4, "y": 114.2}, {"x": -0.1, "y": 112.8}],
+            "WEDGE54": [{"x": -2.8, "y": 102.7}, {"x": -6.9, "y": 98.1}, {"x": -4.4, "y": 102.9}, {"x": -1.5, "y": 103.3}, {"x": -0.4, "y": 101.6}, {"x": 1.9, "y": 93.0}, {"x": -0.1, "y": 106.7}, {"x": -7.0, "y": 101.2}, {"x": -3.5, "y": 101.9}, {"x": -4.5, "y": 101.5}],
+            "WEDGE58": [{"x": -1.5, "y": 88.2}, {"x": -4.0, "y": 90.8}, {"x": -7.1, "y": 96.0}, {"x": -0.1, "y": 94.1}, {"x": -2.4, "y": 85.3}, {"x": -4.1, "y": 88.9}, {"x": -4.2, "y": 94.8}, {"x": 3.1, "y": 919}, {"x": -2.0, "y": 106.3}, {"x": 2.6, "y": 905}]
+        };
+
+        let myChart = null;
+
+        window.onload = function() {
+            setupDropdownOptions();
+            setupDragAndDrop();
+            loadClubDataAndStyle();
+        };
+
+        function setupDropdownOptions(defaultSelect = "IRON7") {
+            const select = document.getElementById('clubSelect');
+            select.innerHTML = '';
+            Object.keys(database).forEach(club => {
+                const opt = document.createElement('option');
+                opt.value = club;
+                opt.innerText = club;
+                if (club === defaultSelect) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('dropZone');
+            ['dragenter', 'dragover'].forEach(name => {
+                dropZone.addEventListener(name, (e) => { e.preventDefault(); });
+            });
+            ['dragleave', 'drop'].forEach(name => {
+                dropZone.addEventListener(name, (e) => { e.preventDefault(); });
+            });
+            dropZone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files.length > 0) processCSVFile(files[0]);
+            });
+        }
+
+        function handleFileSelect(input) {
+            if (input.files.length > 0) processCSVFile(input.files[0]);
+        }
+
+        function processCSVFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split(/\r?\n/);
+                let playerFound = "", dateFound = "", headerIndex = -1;
+
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].includes("Player's Name:")) {
+                        playerFound = lines[i].split(',')[1]?.trim();
+                    }
+                    if (lines[i].includes("Club ID") && lines[i].includes("Carry")) {
+                        headerIndex = i;
+                        break;
+                    }
+                }
+
+                if (headerIndex === -1) {
+                    alert("无法解析该 CSV 文件，请确保是 GCQuad 导出的标准原始表格！");
+                    return;
+                }
+
+                const headers = lines[headerIndex].split(',');
+                const clubIdx = headers.findIndex(h => h.trim().includes("Club ID"));
+                const carryIdx = headers.findIndex(h => h.trim().startsWith("Carry"));
+                const offlineIdx = headers.findIndex(h => h.trim().startsWith("Offline"));
+                const dateIdx = headers.findIndex(h => h.trim() === "Date");
+
+                database = {}; 
+                
+                for (let i = headerIndex + 1; i < lines.length; i++) {
+                    const row = lines[i].split(',');
+                    if (row.length <= Math.max(clubIdx, carryIdx, offlineIdx)) continue;
+                    
+                    const clubName = row[clubIdx]?.trim();
+                    const carry = parseFloat(row[carryIdx]);
+                    const offline = parseFloat(row[offlineIdx]);
+
+                    if (dateFound === "" && dateIdx !== -1 && row[dateIdx]) {
+                        try { dateFound = new Date(row[dateIdx].trim()).toISOString().split('T')[0]; } catch(e){}
+                    }
+
+                    if (clubName && !isNaN(carry) && !isNaN(offline)) {
+                        if (!database[clubName]) database[clubName] = [];
+                        database[clubName].push({ x: offline, y: carry });
+                    }
+                }
+
+                if (playerFound) document.getElementById('playerName').value = playerFound;
+                if (dateFound) document.getElementById('testDate').value = dateFound;
+
+                const firstClub = Object.keys(database)[0];
+                setupDropdownOptions(firstClub);
+                loadClubDataAndStyle();
+            };
+            reader.readAsText(file, 'utf-8');
+        }
+
+        function loadClubDataAndStyle() {
+            const selectedClub = document.getElementById('clubSelect').value;
+            if (!selectedClub || !database[selectedClub]) return;
+
+            const points = database[selectedClub];
+            const tbody = document.getElementById('shotInputsTableBody');
+            tbody.innerHTML = '';
+            
+            points.forEach((p, idx) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="shot-num">${idx + 1}</td>
+                    <td><input type="number" step="0.1" class="carry-input" value="${p.y.toFixed(1)}" oninput="updateChartFromInputs()"></td>
+                    <td><input type="number" step="0.1" class="offline-input" value="${p.x.toFixed(1)}" oninput="updateChartFromInputs()"></td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('statsTitle').innerText = `数据统计 (${selectedClub})`;
+            calculateAndDrawChart(points, selectedClub);
+        }
+
+        function updateChartFromInputs() {
+            const selectedClub = document.getElementById('clubSelect').value;
+            const tbody = document.getElementById('shotInputsTableBody');
+            const rows = tbody.querySelectorAll('tr');
+            const updatedPoints = [];
+
+            rows.forEach(row => {
+                const carryVal = parseFloat(row.querySelector('.carry-input').value);
+                const offlineVal = parseFloat(row.querySelector('.offline-input').value);
+                
+                if (!isNaN(carryVal) && !isNaN(offlineVal)) {
+                    updatedPoints.push({ x: offlineVal, y: carryVal });
+                }
+            });
+
+            if (updatedPoints.length > 0 && selectedClub) {
+                database[selectedClub] = updatedPoints;
+                calculateAndDrawChart(updatedPoints, selectedClub);
+            }
+        }
+
+        function calculateAndDrawChart(points, clubName) {
+            let totalCarry = 0, totalOffline = 0;
+            const n = points.length;
+
+            if (n < 2) return;
+
+            points.forEach(p => { totalCarry += p.y; totalOffline += p.x; });
+            const avgCarry = totalCarry / n;
+            const avgOffline = totalOffline / n;
+
+            let varCarry = 0, varOffline = 0, covar = 0;
+            points.forEach(p => {
+                varCarry += Math.pow(p.y - avgCarry, 2);
+                varOffline += Math.pow(p.x - avgOffline, 2);
+                covar += (p.x - avgOffline) * (p.y - avgCarry);
+            });
+            
+            const sdCarry = Math.sqrt(varCarry / (n - 1)) || 0;
+            const sdOffline = Math.sqrt(varOffline / (n - 1)) || 0;
+            covar = covar / (n - 1);
+
+            const confSelect = document.getElementById('confidenceLevel').value;
+            const confidenceScale = confSelect === "0.60" ? 1.376 : 2.447; 
+            const percentStr = confSelect === "0.60" ? "60%" : "95%";
+
+            document.getElementById('lblSdCarry').innerText = `距离误差 (${percentStr})`;
+            document.getElementById('lblSdOffline').innerText = `方向误差 (${percentStr})`;
+
+            const rangeCarry = sdCarry * confidenceScale;
+            const rangeOffline = sdOffline * confidenceScale;
+
+            document.getElementById('avgCarry').innerText = avgCarry.toFixed(1) + " YDS";
+            document.getElementById('avgOffline').innerText = (avgOffline >= 0 ? "R " : "L ") + Math.abs(avgOffline).toFixed(1) + " YDS";
+            document.getElementById('sdCarry').innerText = rangeCarry.toFixed(1) + " YDS";
+            document.getElementById('sdOffline').innerText = rangeOffline.toFixed(1) + " YDS";
+
+            const labelText = confSelect === "0.60" ? "60% 核心离散范围椭圆" : "95% 散布置信圈";
+            const ellipsePoints = [];
+            
+            const trace = varOffline / (n-1) + varCarry / (n-1);
+            const det = (varOffline / (n-1)) * (varCarry / (n-1)) - covar * covar;
+            const lambda1 = trace / 2 + Math.sqrt(Math.max(0, Math.pow(trace, 2) / 4 - det));
+            const lambda2 = trace / 2 - Math.sqrt(Math.max(0, Math.pow(trace, 2) / 4 - det));
+            
+            const a = Math.sqrt(Math.max(0, lambda1)) * confidenceScale; 
+            const b = Math.sqrt(Math.max(0, lambda2)) * confidenceScale; 
+
+            let theta = 0;
+            if (covar !== 0) theta = Math.atan2(lambda1 - varOffline/(n-1), covar);
+
+            for (let i = 0; i <= 360; i += 5) {
+                const rad = (i * Math.PI) / 180;
+                const x = avgOffline + a * Math.cos(rad) * Math.cos(theta) - b * Math.sin(rad) * Math.sin(theta);
+                const y = avgCarry + a * Math.cos(rad) * Math.sin(theta) + b * Math.sin(rad) * Math.cos(theta);
+                ellipsePoints.push({ x: x, y: y });
+            }
+
+            const maxOfflineAbs = Math.max(...points.map(p => Math.abs(p.x)), 15);
+            const xRange = Math.ceil(maxOfflineAbs / 5) * 5 + 5; 
+            const carries = points.map(p => p.y);
+            const yMin = Math.floor((Math.min(...carries) - 15) / 10) * 10;
+            const yMax = Math.ceil((Math.max(...carries) + 15) / 10) * 10;
+
+            if (myChart) myChart.destroy();
+
+            const ctx = document.getElementById('dispersionChart').getContext('2d');
+            myChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: `${clubName} 击球落点 (Shots)`,
+                            data: points,
+                            backgroundColor: '#ff5a00',
+                            borderColor: '#ffffff',
+                            borderWidth: 1.5,
+                            pointRadius: 6,
+                            zIndex: 10
+                        },
+                        {
+                            label: labelText,
+                            data: ellipsePoints,
+                            showLine: true,
+                            fill: true,
+                            backgroundColor: confSelect === "0.60" ? 'rgba(255, 90, 0, 0.09)' : 'rgba(255, 90, 0, 0.05)',
+                            borderColor: 'rgba(255, 90, 0, 0.75)',
+                            borderWidth: 2,
+                            pointRadius: 0, 
+                            borderDash: confSelect === "0.60" ? [] : [5, 5], 
+                            zIndex: 5
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#fff', font: { size: 13 } } },
+                        annotation: {
+                            annotations: {
+                                lineX: { type: 'line', xMin: avgOffline, xMax: avgOffline, borderColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderDash: [5, 5] },
+                                lineY: { type: 'line', yMin: avgCarry, yMax: avgCarry, borderColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderDash: [5, 5] },
+                                centerPoint: { type: 'point', xValue: avgOffline, yValue: avgCarry, backgroundColor: '#ffffff', radius: 4 }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: '左右偏差 Offline (YDS)', color: '#8a94a6' },
+                            min: -xRange, max: xRange,
+                            grid: { color: '#2d3548' },
+                            ticks: { color: '#8a94a6', callback: v => v === 0 ? 'Target' : (v > 0 ? 'R' + v : 'L' + Math.abs(v)) }
+                        },
+                        y: {
+                            title: { display: true, text: '落点距离 Carry (YDS)', color: '#8a94a6' },
+                            min: yMin, max: yMax,
+                            grid: { color: '#2d3548' },
+                            ticks: { color: '#8a94a6' }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
